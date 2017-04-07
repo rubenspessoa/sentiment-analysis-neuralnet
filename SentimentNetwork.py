@@ -64,7 +64,7 @@ class SentimentNetwork:
         self.layer_0 *= 0
         for word in review.split(" "):
             if word in self.word2index.keys():
-                self.layer_0[0][self.word2index[word]] += 1
+                self.layer_0[0][self.word2index[word]] = 1
 
     def get_target_for_label(self, label):
         if label == 'POSITIVE':
