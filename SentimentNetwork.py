@@ -2,30 +2,59 @@
 
 import time
 import numpy as np
-
+from collections import Counter
 
 class SentimentNetwork:
 
-    def __init__(self, reviews, labels, hidden_nodes=10, learning_rate=0.1):
+    def __init__(self, reviews, labels, min_count=10, polarity_cutoff=0.1, hidden_nodes=10, learning_rate=0.1):
 
         np.random.seed(1)
 
-        self.pre_process_data(reviews, labels)
+        self.pre_process_data(reviews, labels, polarity_cutoff, min_count)
 
         self.init_network(len(self.review_vocab), hidden_nodes, 1, learning_rate)
 
-    def pre_process_data(self, reviews, labels):
+    def pre_process_data(self, reviews, labels, polarity_cutoff, min_count):
+
+        positive_counts = Counter()
+        negative_counts = Counter()
+        total_counts = Counter()
+
+        for i in range(len(reviews)):
+            if labels[i] == 'POSITIVE':
+                for word in reviews[i].split(" "):
+                    positive_counts[word] += 1
+                    total_counts[word] += 1
+            else:
+                for word in reviews[i].split(" "):
+                    negative_counts[word] += 1
+                    total_counts[word] += 1
+
+        pos_neg_ratios = Counter()
+
+        for term, cnt in list(total_counts.most_common()):
+            if (cnt >= 50):
+                pos_neg_ratio = positive_counts[term] / float(negative_counts[term] + 1)
+                pos_neg_ratios[term] = pos_neg_ratio
+
+        for word, ratio in pos_neg_ratios.most_common():
+            if (ratio > 1):
+                pos_neg_ratios[word] = np.log(ratio)
+            else:
+                pos_neg_ratios[word] = -np.log((1 / (ratio + 0.01)))
 
         review_vocab = set()
-
         for review in reviews:
             for word in review.split(" "):
-                review_vocab.add(word)
-
+                if (total_counts[word] > min_count):
+                    if (word in pos_neg_ratios.keys()):
+                        if ((pos_neg_ratios[word] >= polarity_cutoff) or (pos_neg_ratios[word] <= -polarity_cutoff)):
+                            review_vocab.add(word)
+                    else:
+                        review_vocab.add(word)
         self.review_vocab = list(review_vocab)
 
         label_vocab = set()
-
         for label in labels:
             label_vocab.add(label)
 
@@ -35,12 +64,10 @@ class SentimentNetwork:
         self.label_vocab_size = len(self.label_vocab)
 
         self.word2index = {}
-
         for i, word in enumerate(self.review_vocab):
             self.word2index[word] = i
 
         self.label2index = {}
-
         for i, label in enumerate(self.label_vocab):
             self.label2index[label] = i
 
@@ -58,6 +85,8 @@ class SentimentNetwork:
         self.learning_rate = learning_rate
 
         self.layer_0 = np.zeros((1, input_nodes))
+        self.layer_1 = np.zeros((1,hidden_nodes))
+
 
     def update_input_layer(self, review):
 
@@ -78,7 +107,15 @@ class SentimentNetwork:
     def sigmoid_output_2_derivative(self, output):
         return output * (1 - output)
 
-    def train(self, training_reviews, training_labels):
+    def train(self, training_reviews_raw, training_labels):
+
+        training_reviews = list()
+        for review in training_reviews_raw:
+            indices = set()
+            for word in review.split(" "):
+                if word in self.word2index.keys():
+                    indices.add(self.word2index[word])
+            training_reviews.append(list(indices))
 
         assert (len(training_reviews) == len(training_labels))
 
@@ -94,13 +131,15 @@ class SentimentNetwork:
             ### Forward pass ###
 
             # Input Layer
-            self.update_input_layer(review)
+            # self.update_input_layer(review)
 
             # Hidden layer
-            layer_1 = self.layer_0.dot(self.weights_0_1)
+            self.layer_1 *= 0
+            for index in review:
+                self.layer_1 += self.weights_0_1[index]
 
             # Output layer
-            layer_2 = self.sigmoid(layer_1.dot(self.weights_1_2))
+            layer_2 = self.sigmoid(self.layer_1.dot(self.weights_1_2))
 
             ### Backward pass ###
 
@@ -114,8 +153,10 @@ class SentimentNetwork:
 
             # Update the weights
 
-            self.weights_1_2 -= layer_1.T.dot(layer_2_delta) * self.learning_rate
-            self.weights_0_1 -= self.layer_0.T.dot(layer_1_delta) * self.learning_rate
+            self.weights_1_2 -= self.layer_1.T.dot(layer_2_delta) * self.learning_rate
+
+            for index in review:
+                self.weights_0_1[index] -= layer_1_delta[0] * self.learning_rate
 
             if np.abs(layer_2_error) < 0.5:
                 correct_so_far += 1
@@ -155,8 +196,8 @@ class SentimentNetwork:
 
         # Output layer
         layer_2 = self.sigmoid(layer_1.dot(self.weights_1_2))
-
         if layer_2[0] > 0.5:
             return "POSITIVE"
         else:
             return "NEGATIVE"
+

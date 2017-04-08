@@ -15,13 +15,13 @@ if __name__ == '__main__':
 
     ## Creating Neural Net
 
-    sentiment_analysis = SentimentNetwork(reviews[:-1000], labels[:-1000], learning_rate=0.1)
+    sentiment_analysis = SentimentNetwork(reviews[:-1000], labels[:-1000], polarity_cutoff=0.8, min_count = 20, learning_rate=0.1)
 
-    #print("Training the neural net")
-    sentiment_analysis.train(reviews[:-1000], labels[:-1000])
+    print("Training the neural net")
+    sentiment_analysis.train(reviews[:-1000] * 10, labels[:-1000] * 10)
 
-    #print("Running and evaluating a single random review")
-    #chosen_index = np.random.random_integers(0, len(reviews) - 1)
+    print("Running and evaluating a single random review")
+    chosen_index = np.random.random_integers(0, len(reviews) - 1)
 
     sentiment_analysis.test(reviews[:-1000], labels[:-1000])
 
